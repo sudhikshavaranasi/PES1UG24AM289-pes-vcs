@@ -93,12 +93,73 @@ int object_exists(const ObjectID *id) {
 
 //
 // Returns 0 on success, -1 on error.
-int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
-    // TODO: Implement
-    (void)type; (void)data; (void)len; (void)id_out;
-    return -1;
-}
+#include <openssl/evp.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
+    // 1. Convert type enum → string
+    const char *type_str =
+        (type == OBJ_BLOB) ? "blob" :
+        (type == OBJ_TREE) ? "tree" :
+        (type == OBJ_COMMIT) ? "commit" : NULL;
+
+    if (!type_str) return -1;
+
+    // 2. Build header
+    char header[64];
+    int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len);
+    header[header_len++] = '\0';
+
+    // 3. Combine header + data
+    size_t total_len = header_len + len;
+    unsigned char *full = malloc(total_len);
+    memcpy(full, header, header_len);
+    memcpy(full + header_len, data, len);
+
+    // 4. Compute hash
+    compute_hash(full, total_len, id_out);
+
+    // 5. If already exists → done
+    if (object_exists(id_out)) {
+        free(full);
+        return 0;
+    }
+
+    // 6. Build path
+    char path[512];
+    object_path(id_out, path, sizeof(path));
+
+    // Create directory
+    char dir[512];
+    strncpy(dir, path, sizeof(dir));
+    char *slash = strrchr(dir, '/');
+    if (slash) {
+        *slash = '\0';
+        mkdir(OBJECTS_DIR, 0755);
+        mkdir(dir, 0755);
+    }
+
+    // 7. Write file
+    int fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full);
+        return -1;
+    }
+
+    ssize_t written = write(fd, full, total_len);
+    if (written < 0 || (size_t)written != total_len) {
+        close(fd);
+        free(full);
+        return -1;
+    }
+
+    close(fd);
+    free(full);
+
+    return 0;
+}
 // Read an object from the store.
 //
 // Steps:
@@ -122,7 +183,75 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
-    return -1;
+    char path[512];
+    object_path(id, path, sizeof(path));
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+
+    // Get file size
+    fseek(f, 0, SEEK_END);
+    size_t file_size = ftell(f);
+    rewind(f);
+
+    unsigned char *buffer = malloc(file_size);
+    if (!buffer) {
+        fclose(f);
+        return -1;
+    }
+
+    if (fread(buffer, 1, file_size, f) != file_size) {
+        free(buffer);
+        fclose(f);
+        return -1;
+    }
+
+    fclose(f);
+
+    // Verify hash
+    ObjectID check;
+    compute_hash(buffer, file_size, &check);
+
+    if (memcmp(check.hash, id->hash, HASH_SIZE) != 0) {
+        free(buffer);
+        return -1;
+    }
+
+    // Find header end
+    char *null_pos = memchr(buffer, '\0', file_size);
+    if (!null_pos) {
+        free(buffer);
+        return -1;
+    }
+
+    size_t header_len = null_pos - (char *)buffer + 1;
+
+    // Parse type + size
+    char type_str[16];
+    size_t size;
+
+    if (sscanf((char *)buffer, "%15s %zu", type_str, &size) != 2) {
+        free(buffer);
+        return -1;
+    }
+
+    // Convert string → enum
+    if (strcmp(type_str, "blob") == 0)
+        *type_out = OBJ_BLOB;
+    else if (strcmp(type_str, "tree") == 0)
+        *type_out = OBJ_TREE;
+    else if (strcmp(type_str, "commit") == 0)
+        *type_out = OBJ_COMMIT;
+    else {
+        free(buffer);
+        return -1;
+    }
+
+    *len_out = size;
+
+    *data_out = malloc(size);
+    memcpy(*data_out, buffer + header_len, size);
+
+    free(buffer);
+    return 0;
 }
