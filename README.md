@@ -163,3 +163,39 @@ If garbage collection runs concurrently with a commit:
 - Protecting recently created objects from deletion
 
 ---
+
+## Screenshots:
+
+### Phase 1:
+Command:
+```bash
+./test_objects
+```
+![test_objects](screenshots/phase1_1.png)
+
+Command:
+```bash
+find .pes/objects -type f
+```
+![pes_objects](screenshots/phase1_2.png)
+
+
+### Phase 2:
+Command:
+```bash
+./test_tree
+```
+![test_tree](screenshots/phase2_1.png)
+
+Command:
+```bash
+find .pes/objects -type f
+```
+![pes_objects](screenshots/phase2_2.png)
+
+### Phase 3:
+```bash
+./pes init
+./pes add file1.txt file2.txt
+./pes status
+```
