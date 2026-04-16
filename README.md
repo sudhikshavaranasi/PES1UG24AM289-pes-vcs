@@ -185,7 +185,7 @@ Command:
 ```bash
 ./test_tree
 ```
-![test_tree](screenshots/phase2_1.png)
+![test_tree](screenshots/phase2.png)
 
 Command:
 ```bash
@@ -194,8 +194,39 @@ find .pes/objects -type f
 ![pes_objects](screenshots/phase2_2.png)
 
 ### Phase 3:
+
+Command:
 ```bash
 ./pes init
 ./pes add file1.txt file2.txt
 ./pes status
 ```
+![pes_init](screenshots/phase3_1.png)
+
+Command:
+```bash
+cat .pes/index
+```
+![pes_index](screenshots/phase3_3.png)
+
+
+### Phase 4:
+
+Command:
+```bash
+./pes log
+```
+![pes_logs](screenshots/phase4_1.png)
+
+Command:
+```bash
+find .pes -type f | sort
+```
+![pes_types](screenshots/phase4_2.png)
+
+Command:
+```bash
+cat .pes/refs/heads/main
+cat .pes/HEAD
+```
+![pes_refs](screenshots/phase4_3.png)
