@@ -15,7 +15,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
-
+#include "index.h"
+#include "pes.h"
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
 #define MODE_FILE      0100644
@@ -33,7 +34,7 @@ uint32_t get_file_mode(const char *path) {
     if (st.st_mode & S_IXUSR) return MODE_EXEC;
     return MODE_FILE;
 }
-
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 // Parse binary tree data into a Tree struct safely.
 // Returns 0 on success, -1 on parse error.
 int tree_parse(const void *data, size_t len, Tree *tree_out) {
@@ -130,8 +131,41 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
-    (void)id_out;
-    return -1;
+    Index idx;
+
+    if (index_load(&idx) != 0) return -1;
+
+    Tree tree;
+    tree.count = 0;
+
+    for (int i = 0; i < idx.count; i++) {
+        IndexEntry *ie = &idx.entries[i];
+        TreeEntry *te = &tree.entries[tree.count];
+
+        const char *name = strrchr(ie->path, '/');
+        if (name)
+            name++;
+        else
+            name = ie->path;
+
+        strcpy(te->name, name);
+        te->mode = ie->mode;
+        te->hash = ie->hash;
+
+        tree.count++;
+    }
+
+    void *data;
+    size_t len;
+
+    if (tree_serialize(&tree, &data, &len) != 0)
+        return -1;
+
+    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+    return 0;
 }
